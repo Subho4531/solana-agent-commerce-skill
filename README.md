@@ -56,7 +56,10 @@ By leveraging the HTTP `402 Payment Required` status code, the x402 protocol ena
 │   ├── scaffold-buyer.md              # Scaffold a buyer agent
 │   ├── scaffold-seller.md             # Scaffold a seller service
 │   ├── test-devnet.md                 # Test workflows on devnet
-│   └── x402-scaffold.md               # Base scaffolding helper script
+│   ├── x402-scaffold.md               # Base scaffolding helper script
+│   ├── scaffold-mcp.md                # Scaffold pay-per-call MCP tool server
+│   ├── request-faucet.md              # Bootstrapping SOL + devnet USDC
+│   └── verify-payment.md              # Verify transaction signature on-chain
 └── rules/
     └── x402-security-rules.md         # Custom guidelines for safe agent commerce
 ```
