@@ -22,16 +22,17 @@ By leveraging the long-dormant HTTP `402 Payment Required` status code, the x402
 ├── README.md                          # Project overview and specifications
 ├── LICENSE                            # MIT License
 ├── install.sh                         # Developer installation script
-├── SKILL.md                           # Routing entry point & progressive load hub
-├── references/
-│   ├── x402-server-patterns.md    # Express, Hono, and Next.js middleware setups
-│   ├── x402-client-patterns.md    # Fetch wrappers, wallet configs, and spending caps
-│   ├── x402-solana-integration.md # USDC SPL Token transfer & verification
-│   ├── x402-facilitator.md        # Verifier/Facilitator configurations
-│   ├── x402-agent-kit.md          # LangChain and Solana Agent Kit integrations
-│   ├── x402-mcp-monetization.md   # Wrapping & monetizing MCP servers
-│   ├── x402-security.md           # Key management, spending caps, and safety rules
-│   └── x402-testing.md            # Mocking payment challenges, local testing
+├── skill/
+│   ├── SKILL.md                       # Routing entry point & progressive load hub
+│   └── references/
+│       ├── x402-server-patterns.md    # Express, Hono, and Next.js middleware setups
+│       ├── x402-client-patterns.md    # Fetch wrappers, wallet configs, and spending caps
+│       ├── x402-solana-integration.md # USDC SPL Token transfer & verification
+│       ├── x402-facilitator.md        # Verifier/Facilitator configurations
+│       ├── x402-agent-kit.md          # LangChain and Solana Agent Kit integrations
+│       ├── x402-mcp-monetization.md   # Wrapping & monetizing MCP servers
+│       ├── x402-security.md           # Key management, spending caps, and safety rules
+│       └── x402-testing.md            # Mocking payment challenges, local testing
 ├── agents/
 │   ├── x402-architect.md              # System design & architecture helper agent
 │   └── x402-builder.md                # Node.js/TypeScript developer helper agent

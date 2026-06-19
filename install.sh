@@ -36,8 +36,8 @@ mkdir -p "${TARGET_SKILL_DIR}"
 mkdir -p "${TARGET_SKILL_DIR}/references"
 
 # Copy Skill Hub and Reference manuals
-cp -r SKILL.md "${TARGET_SKILL_DIR}/"
-cp -r references/* "${TARGET_SKILL_DIR}/references/"
+cp -r skill/SKILL.md "${TARGET_SKILL_DIR}/"
+cp -r skill/references/* "${TARGET_SKILL_DIR}/references/"
 echo "✔ Installed skill hub and references to: ${TARGET_SKILL_DIR}"
 
 # Install Agents if requested
