@@ -35,6 +35,10 @@ description: Solana-first agent commerce and x402 skill for building paid APIs, 
 | Monetize MCP tool server with x402 | [x402-mcp-monetization.md](references/x402-mcp-monetization.md) |
 | Security: spend caps, key management, OFAC | [x402-security.md](references/x402-security.md) |
 | Devnet testing, mock facilitator, Vitest | [x402-testing.md](references/x402-testing.md) |
+| Jupiter swap → USDC auto-topup | [x402-defi-jupiter.md](references/x402-defi-jupiter.md) |
+| Orca/Raydium/Drift analytics APIs | [x402-defi-protocols.md](references/x402-defi-protocols.md) |
+| Helius RPC/DAS, Pyth oracles, Cloudflare | [x402-data-infrastructure.md](references/x402-data-infrastructure.md) |
+| Multi-agent commerce, orchestrator/worker | [x402-multi-agent.md](references/x402-multi-agent.md) |
 | Ecosystem resources, DeFi, infrastructure, and roadmap docs | [docs/index.md](../docs/index.md) |
 | Build-time and runtime agent workflows & flowcharts | [docs/agent_workflow.md](../docs/agent_workflow.md) |
 

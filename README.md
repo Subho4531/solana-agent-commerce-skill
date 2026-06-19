@@ -30,12 +30,16 @@ By leveraging the HTTP `402 Payment Required` status code, the x402 protocol ena
 │   └── references/
 │       ├── x402-server-patterns.md    # Express, Hono, and Next.js middleware setups
 │       ├── x402-client-patterns.md    # Fetch wrappers, wallet configs, and spending caps
-│       ├── x402-solana-integration.md # CAIP-2 IDs, USDC mints, signer setup
-│       ├── x402-facilitator.md        # Verifier/facilitator configurations
-│       ├── x402-agent-kit.md          # LangChain and Solana Agent Kit patterns
-│       ├── x402-mcp-monetization.md   # Wrapping and monetizing MCP servers
-│       ├── x402-security.md           # Key management, spending caps, and safety rules
-│       └── x402-testing.md            # Devnet and local test patterns
+│       ├── x402-solana-integration.md # CAIP-2 IDs, USDC mints, ATA, Token-2022, nonces, compute budget
+│       ├── x402-facilitator.md        # Verifier/facilitator configurations (hosted/self-hosted)
+│       ├── x402-agent-kit.md          # AI SDK, LangGraph, and Solana Agent Kit patterns
+│       ├── x402-mcp-monetization.md   # Wrapping and monetizing MCP servers (batch/stream)
+│       ├── x402-security.md           # Key management, spending caps, OFAC, gas limits, LLM inject defenses
+│       ├── x402-testing.md            # Devnet, Vitest suite, CI configuration, k6 load tests
+│       ├── x402-defi-jupiter.md       # SOL-to-USDC auto-swap quote & swap execute top-ups
+│       ├── x402-defi-protocols.md     # Monetizing Orca Whirlpools, Raydium, Meteora, and Drift data APIs
+│       ├── x402-data-infrastructure.md# Paid Helius DAS & fee proxies, Pyth oracle payloads, wrangler Workers
+│       └── x402-multi-agent.md        # Registry specifications, delegation, multi-hop cost traces
 ├── agents/
 │   ├── x402-architect.md              # System design & architecture helper agent
 │   ├── x402-builder.md                # Node.js/TypeScript developer helper agent
