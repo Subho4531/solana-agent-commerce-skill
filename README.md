@@ -1,38 +1,43 @@
 # Solana Agent Commerce Skill (x402)
 
-The **Solana Agent Commerce Skill** is a production-grade developer integration toolkit designed for the **Solana AI Kit**. It enables AI agents to monetize services (APIs, content, and MCP tools) and pay for resources dynamically using the **x402 Protocol** over the Solana network.
+The **Solana Agent Commerce Skill** is a production-grade developer integration toolkit designed for the **Solana AI Kit**. It enables AI agents to monetize services (APIs, content, and MCP tools), autonomously execute DeFi strategies, and dynamically pay for resources using the **x402 Protocol** over the Solana network.
 
 By leveraging the long-dormant HTTP `402 Payment Required` status code, the x402 protocol facilitates frictionless machine-to-machine payments. Settling in stablecoins like USDC on Solana ensures transaction costs stay under $0.001 and settle in less than 500ms.
 
 ---
 
-## Key Features
+## 🌟 Key Features
 
-- **Standard HTTP 402 Workflows**: Automatic generation and resolution of payment challenges.
-- **Node.js/TypeScript Support**: Preconfigured middlewares for Express, Hono, and Next.js.
-- **Client Auto-Settlement**: Seamless client wrappers (`@x402/fetch` and `@x402/svm`) that sign, broadcast, and retry gated requests autonomously.
-- **MCP Server Monetization**: Wrap any standard Model Context Protocol (MCP) server behind Solana micropayments.
-- **Agent Safety Controls**: Built-in spending limits, KMS key vaulting, and transaction concurrency guardrails.
+- **Standard HTTP 402 Workflows**: Automatic generation and resolution of payment challenges via Express, Hono, and Next.js.
+- **DeFi Integration & Autonomous Spenders**: Agents can use **Jupiter v6** to auto-convert any token to USDC to fund their x402 payments on the fly, or execute paid quantitative strategies via **Orca Whirlpools**, **Meteora DLMM**, and **Drift Protocol**.
+- **Data & Infrastructure Monetization**: Wrap **Helius DAS** queries or **Pyth Network** oracle feeds behind x402 payment walls.
+- **Agent Framework Integration**: Deep compatibility with **Solana Agent Kit**, **LangChain**, and **Vercel AI SDK**, including multi-agent architectures where agents pay each other for specialized microservices.
+- **MCP Server Monetization**: Wrap any standard Model Context Protocol (MCP) server behind Solana micropayments using an HTTP proxy.
+- **Agent Safety Controls**: Built-in spending limits, KMS key vaulting, domain allowlists, and transaction concurrency guardrails.
 
 ---
 
-## Directory Structure
+## 📁 Directory Structure
 
-```
+```text
 ├── README.md                          # Project overview and specifications
 ├── LICENSE                            # MIT License
 ├── install.sh                         # Developer installation script
 ├── skill/
 │   ├── SKILL.md                       # Routing entry point & progressive load hub
 │   └── references/
-│       ├── x402-server-patterns.md    # Express, Hono, and Next.js middleware setups
-│       ├── x402-client-patterns.md    # Fetch wrappers, wallet configs, and spending caps
-│       ├── x402-solana-integration.md # USDC SPL Token transfer & verification
-│       ├── x402-facilitator.md        # Verifier/Facilitator configurations
-│       ├── x402-agent-kit.md          # LangChain and Solana Agent Kit integrations
-│       ├── x402-mcp-monetization.md   # Wrapping & monetizing MCP servers
-│       ├── x402-security.md           # Key management, spending caps, and safety rules
-│       └── x402-testing.md            # Mocking payment challenges, local testing
+│       ├── server-patterns.md         # Express, Hono, and Next.js middleware setups
+│       ├── client-patterns.md         # Fetch wrappers, wallet configs, and spending caps
+│       ├── solana-integration.md      # USDC SPL Token transfer & verification
+│       ├── facilitator.md             # Verifier/Facilitator configurations
+│       ├── defi-jupiter.md            # Jupiter v6 auto-swaps to USDC for x402 funding
+│       ├── defi-protocols.md          # Orca, Meteora, Raydium, and Drift integrations
+│       ├── data-infrastructure.md     # Monetizing Helius APIs and Pyth oracle feeds
+│       ├── agent-frameworks.md        # LangChain, Vercel AI SDK, and Solana Agent Kit
+│       ├── multi-agent.md             # Agent-to-agent payment architectures
+│       ├── mcp-monetization.md        # Wrapping & monetizing MCP servers
+│       ├── security.md                # Key management, spending caps, and safety rules
+│       └── testing.md                 # Mocking payment challenges, local testing
 ├── agents/
 │   ├── x402-architect.md              # System design & architecture helper agent
 │   └── x402-builder.md                # Node.js/TypeScript developer helper agent
@@ -48,7 +53,7 @@ By leveraging the long-dormant HTTP `402 Payment Required` status code, the x402
 
 ---
 
-## Quick Start & Installation
+## 🚀 Quick Start & Installation
 
 To install this skill into your local AI agent or Claude Code environment, clone the repository and run the install script:
 
@@ -65,7 +70,7 @@ cd solana-agent-commerce-skill
 
 ---
 
-## Integration Overview
+## 🔌 Integration Overview
 
 ### 1. Guarding an API (Server Side)
 
@@ -116,8 +121,26 @@ const response = await fetchWithPayment("https://api.example.com/api/v1/data");
 const data = await response.json();
 ```
 
+### 3. Agent Frameworks & Multi-Agent Architecture
+
+With our custom integrations, you can wire x402 directly into the **Solana Agent Kit**:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Orchestrator Agent (Buyer)        Worker Agent (Seller)    │
+│  ┌───────────────────────┐         ┌──────────────────────┐ │
+│  │ Solana Agent Kit      │         │ Hono / Express       │ │
+│  │ ├─ Jupiter Auto-Swap  │ ──402─► │ ├─ x402 Middleware   │ │
+│  │ ├─ @x402/fetch wrapper│ ◄──TXN─ │ ├─ Pyth / Helius     │ │
+│  │ └─ Spend Limits       │ ──200─► │ └─ Specialized Task  │ │
+│  └───────────────────────┘         └──────────────────────┘ │
+│              │                               │              │
+│              └─────► Solana Mainnet ◄────────┘              │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ---
 
-## License
+## ⚖️ License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
