@@ -1,5 +1,7 @@
 # Solana Agent Commerce Skill (x402)
 
+![Solana Agent Commerce Launch](/launch.png)
+
 The **Solana Agent Commerce Skill** is a developer integration toolkit for building Solana x402 paid APIs, paid MCP gateways, and buyer agents with strict USDC spend policies.
 
 By leveraging the HTTP `402 Payment Required` status code, the x402 protocol enables machine-to-machine payment flows where agents can pay for resources and receive auditable payment receipts.
