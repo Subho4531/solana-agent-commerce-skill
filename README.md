@@ -1,9 +1,12 @@
+
 # Solana Agent Commerce Skill (x402)
+![Solana Agent Skills](assets/image.png)
 
 [![Protocol: x402 v2](https://img.shields.io/badge/Protocol-x402_v2-blue.svg)](https://x402.org)
 [![Network: Solana](https://img.shields.io/badge/Network-Solana-black.svg)](https://solana.com)
 [![Asset: USDC](https://img.shields.io/badge/Asset-USDC-green.svg)](https://circle.com/usdc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 
 The **Solana Agent Commerce Skill** is a production-grade developer integration toolkit for building Solana x402 paid APIs, paid MCP gateways, and buyer agents with strict USDC spend policies.
 
@@ -76,9 +79,7 @@ cd solana-agent-commerce-skill
 ./install.sh --agents --rules --commands
 ```
 
-### Installation Preview
 
-![Solana Agent Skills Installation](assets/image.png)
 
 ### Installation Flags
 
