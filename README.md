@@ -1,21 +1,27 @@
 # Solana Agent Commerce Skill (x402)
 
-![Solana Agent Commerce Launch](/assets/launch.png)
+[![Protocol: x402 v2](https://img.shields.io/badge/Protocol-x402_v2-blue.svg)](https://x402.org)
+[![Network: Solana](https://img.shields.io/badge/Network-Solana-black.svg)](https://solana.com)
+[![Asset: USDC](https://img.shields.io/badge/Asset-USDC-green.svg)](https://circle.com/usdc)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-The **Solana Agent Commerce Skill** is a developer integration toolkit for building Solana x402 paid APIs, paid MCP gateways, and buyer agents with strict USDC spend policies.
+The **Solana Agent Commerce Skill** is a production-grade developer integration toolkit for building Solana x402 paid APIs, paid MCP gateways, and buyer agents with strict USDC spend policies.
 
-By leveraging the HTTP `402 Payment Required` status code, the x402 protocol enables machine-to-machine payment flows where agents can pay for resources and receive auditable payment receipts.
+By leveraging the HTTP `402 Payment Required` status code, the x402 protocol enables machine-to-machine (M2M) payment flows where agents can pay for resources and receive auditable payment receipts.
+
+> [!IMPORTANT]
+> This skill strictly adheres to the v2 x402 specification utilizing the modern `@solana/kit` (v2) library for all transaction and cryptographic signing routines.
 
 ---
 
 ## 🌟 Key Features
 
-- **Standard HTTP 402 Workflows**: Automatic generation and resolution of payment challenges via Express, Hono, and Next.js.
-- **Solana x402 Defaults**: x402 v2, `exact` SVM scheme, CAIP-2 network IDs, and SPL USDC mint checks.
-- **Autonomous Buyer Safety**: Domain allowlists, payee allowlists, atomic-unit spend caps, receipt logs, and idempotency.
-- **Agent Framework Integration**: Deep compatibility with **Solana Agent Kit**, **LangChain**, and **Vercel AI SDK**, including multi-agent architectures where agents pay each other for specialized microservices.
-- **MCP Server Monetization**: Wrap any standard Model Context Protocol (MCP) server behind Solana micropayments using an HTTP proxy.
-- **Agent Safety Controls**: Built-in spending limits, KMS key vaulting, domain allowlists, and transaction concurrency guardrails.
+*   **Standard HTTP 402 Workflows**: Automatic generation and resolution of payment challenges via Hono, Express, Fastify, and Next.js.
+*   **Solana x402 Defaults**: Native support for x402 v2, `exact` SVM scheme, CAIP-2 network IDs, and SPL USDC mint verification.
+*   **Autonomous Buyer Safety**: Pre-execution domain allowlists, payee allowlists, atomic-unit spend caps, receipt logs, and idempotency.
+*   **Agent Framework Integration**: Deep compatibility with **Solana Agent Kit**, **LangChain**, and **Vercel AI SDK**, including multi-agent architectures where agents pay each other for specialized microservices.
+*   **MCP Server Monetization**: Wrap any standard Model Context Protocol (MCP) server behind Solana micropayments using an HTTP gateway.
+*   **DeFi Integration**: Hook payment challenges into Jupiter v6 SOL-to-USDC swaps for automatic agent wallet top-ups.
 
 ---
 
@@ -25,6 +31,7 @@ By leveraging the HTTP `402 Payment Required` status code, the x402 protocol ena
 ├── README.md                          # Project overview and specifications
 ├── LICENSE                            # MIT License
 ├── install.sh                         # Developer installation script
+├── install-custom.sh                  # Custom installer for agents and rules
 ├── skill/
 │   ├── SKILL.md                       # Routing entry point & progressive load hub
 │   └── references/
@@ -68,71 +75,128 @@ cd solana-agent-commerce-skill
 
 ### Installation Flags
 
-- `--agents`: Installs the `x402-architect`, `x402-builder`, and `x402-auditor` system agents to `.agents/`.
-- `--rules`: Copies the custom developer safety guidelines (`x402-security-rules.md`) to the target configuration.
-- `--commands`: Installs command prompts.
-- `--target claude`: Installs to Claude-style paths instead of Codex paths.
+*   `--agents`: Installs the `x402-architect`, `x402-builder`, and `x402-auditor` system agents to `.agents/`.
+*   `--rules`: Copies the custom developer safety guidelines (`x402-security-rules.md`) to the target configuration.
+*   `--commands`: Installs the custom command prompts.
+*   `--target claude`: Installs to Claude-style paths instead of Codex paths.
 
 ---
 
-## 🔌 Integration Overview
+## 🔌 Integration Overview & Techniques
 
-### 1. Guarding an API (Server Side)
+Below are the key integration techniques used to deploy secure, autonomous Solana agent commerce.
 
-Use the Express middleware to gate routes:
+### 1. Guarding an API (Server Side - Hono)
+
+Leverage Hono edge-first middleware to declare price, network, payee, and asset requirements:
 
 ```typescript
-import express from "express";
-import { paymentMiddleware } from "@x402/express";
+import { Hono } from "hono";
+import { paymentMiddleware } from "@x402/hono";
 import { ExactSvmScheme } from "@x402/svm";
 
-const app = express();
+const app = new Hono();
 
 app.use(
+  "/api/v1/summarize",
   paymentMiddleware({
-    "GET /api/v1/data": {
+    "POST /api/v1/summarize": {
       accepts: [{
         scheme: ExactSvmScheme.scheme,
-        network: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-        maxAmountRequired: "10000",
+        network: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", // Devnet CAIP-2
+        maxAmountRequired: "50000", // 0.05 USDC (6 decimals)
         payTo: process.env.PAYEE_WALLET!,
         asset: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
         maxAgeSeconds: 60,
       }],
-      description: "Access gated premium data.",
+      description: "Summarize premium articles.",
     },
   })
 );
+
+app.post("/api/v1/summarize", (c) => {
+  if (!c.req.header("Idempotency-Key")) {
+    return c.json({ error: "Idempotency-Key required" }, 428);
+  }
+  return c.json({ summary: "Summary output..." });
+});
 ```
 
-### 2. Auto-Resolving Gated APIs (Client Side / Agent)
+### 2. Auto-Topup swap via Jupiter (Pattern B Client)
 
-Wrap `fetch` to automatically settle challenges:
+Integrate client-side top-up flows to swap SOL to USDC on the fly if the agent's USDC balance is insufficient for a payment challenge:
 
 ```typescript
 import { wrapFetchWithPayment } from "@x402/fetch";
-import { createSvmClient } from "@x402/svm/client";
-import { toClientSvmSigner } from "@x402/svm";
-import { createKeyPairSignerFromBytes } from "@solana/kit";
-import { base58 } from "@scure/base";
+import { getJupiterQuote, executeJupiterSwap } from "./jupiter-swap";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { createSolanaRpc, PublicKey } from "@solana/kit";
 
-const keypair = await createKeyPairSignerFromBytes(
-  base58.decode(process.env.SVM_PRIVATE_KEY!)
-);
+async function assertAndTopUpSpend(
+  rpcUrl: string,
+  requestedAtomicUsdc: bigint,
+  signer: any
+) {
+  const rpc = createSolanaRpc(rpcUrl);
+  const usdcAta = await getAssociatedTokenAddress(
+    new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+    new PublicKey(signer.address)
+  );
 
-const client = createSvmClient({
-  signer: toClientSvmSigner(keypair),
-  rpcUrl: process.env.SOLANA_RPC_URL,
-});
+  let currentBalance = 0n;
+  try {
+    const res = await rpc.getTokenAccountBalance(usdcAta.toBase58()).send();
+    currentBalance = BigInt(res.value.amount);
+  } catch (err) {}
 
-const fetchWithPayment = wrapFetchWithPayment(fetch, client);
-const response = await fetchWithPayment("https://api.example.com/api/v1/data");
-const data = await response.json();
+  if (currentBalance < requestedAtomicUsdc) {
+    const deficit = requestedAtomicUsdc - currentBalance;
+    const quote = await getJupiterQuote(deficit * 1000n); // SOL estimate
+    await executeJupiterSwap(quote, signer, rpcUrl);
+  }
+}
 ```
 
-### 3. Agent Frameworks & Multi-Agent Architecture
+### 3. Monetizing MCP Tool Calls
 
-With our custom integrations, you can wire x402 directly into the **Solana Agent Kit**:
+Monetize Model Context Protocol (MCP) servers using an HTTP proxy that checks tool pricing and registers them in the `tools/list` schema:
+
+```typescript
+// Gating tool calls using the x402 fetch pipeline
+app.post("/mcp/v1/tools/call", async (c) => {
+  const body = await c.req.json();
+  const price = priceByTool[body.name]; // e.g. "10000" (0.01 USDC)
+  
+  // Verify transaction payload...
+  // Connect downstream and execute tool call:
+  const result = await mcpClient.callTool({
+    name: body.name,
+    arguments: body.arguments,
+  });
+
+  return c.json(result);
+});
+```
+
+### 4. Multi-Hop Cost Accounting
+
+In complex multi-agent setups (Orchestrator -> Researcher -> Translator), pass trace headers to account for spending across the pipeline:
+
+```typescript
+interface BudgetTrace {
+  sessionId: string;
+  originalBudgetAtomic: string;
+  remainingBudgetAtomic: string;
+  hopCount: number;
+}
+
+// Injected into outgoing paid fetch headers to prevent cascading runaway spend
+headers.set("X-Session-Budget-Trace", JSON.stringify(budgetTrace));
+```
+
+---
+
+## 🎨 System Architecture
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
