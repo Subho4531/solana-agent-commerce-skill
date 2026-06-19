@@ -1,99 +1,106 @@
 # x402 Client Integration Patterns
 
-This manual describes how agents can programmatically consume HTTP 402 gated resources, sign transactions, and manage their spending budgets.
+Use this reference when building buyer agents that call paid HTTP APIs and automatically satisfy x402 `402 Payment Required` challenges.
 
----
+## 1. Preferred fetch wrapper
 
-## 1. Wrapping Standard Fetch
-
-Using `@x402/fetch` allows you to wrap the global `fetch` API. When a standard fetch meets a `402 Payment Required` challenge, the wrapper intercepts it, builds/signs/broadcasts the required Solana transaction, and retries the original request with the proof.
+Use `@x402/fetch` instead of parsing payment headers yourself. For Solana/SVM v2, create an `@solana/kit` signer, convert it with `toClientSvmSigner`, then register it with the x402 fetch wrapper.
 
 ```typescript
-import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
-import { ExactSvmScheme } from "@x402/svm";
-import { Keypair } from "@solana/web3.js";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { createSvmClient } from "@x402/svm/client";
+import { toClientSvmSigner } from "@x402/svm";
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { base58 } from "@scure/base";
 
-// Load agent secret key safely
-const secretKey = Uint8Array.from(JSON.parse(process.env.AGENT_SOLANA_KEYPAIR!));
-const agentKeypair = Keypair.fromSecretKey(secretKey);
+const keypair = await createKeyPairSignerFromBytes(
+  base58.decode(process.env.SVM_PRIVATE_KEY!)
+);
 
-const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{
-    network: "solana:mainnet",
-    client: new ExactSvmScheme(agentKeypair),
-  }],
+const signer = toClientSvmSigner(keypair);
+const client = createSvmClient({
+  signer,
+  rpcUrl: process.env.SOLANA_RPC_URL,
 });
 
-// Accessing the gated endpoint is fully transparent to the business logic
-const response = await fetchWithPayment("https://api.provider.com/gated-endpoint");
+const paidFetch = wrapFetchWithPayment(fetch, client);
+
+const response = await paidFetch("https://api.provider.com/gated-endpoint", {
+  headers: {
+    "Idempotency-Key": crypto.randomUUID(),
+  },
+});
+
+if (!response.ok) {
+  throw new Error(`Paid request failed: ${response.status}`);
+}
+
+const paymentReceipt = response.headers.get("PAYMENT-RESPONSE");
 const data = await response.json();
 ```
 
----
+## 2. Config-driven fetch wrapper
 
-## 2. Axios Interceptor Pattern
-
-If your agent uses Axios, you can intercept `402` responses using an interceptor.
+If using `wrapFetchWithPaymentFromConfig`, keep the network as a v2 CAIP-2 ID:
 
 ```typescript
-import axios from "axios";
-import { ExactSvmScheme } from "@x402/svm";
-import { Keypair } from "@solana/web3.js";
+import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
+import { ExactSvmScheme, toClientSvmSigner } from "@x402/svm";
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { base58 } from "@scure/base";
 
-const agentKeypair = Keypair.fromSecretKey(...);
-const svmClient = new ExactSvmScheme(agentKeypair);
-
-const api = axios.create();
-
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response && error.response.status === 402 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      const challenge = error.response.headers["payment-required"];
-      // Parse: scheme=solana-usdc, amount=0.01, address=USDC_RECEIVER, network=solana:mainnet
-      const { amount, address, network } = parseChallengeHeader(challenge);
-
-      // Perform SPL Token transfer and submit to Solana
-      const signature = await svmClient.pay({
-        amount,
-        recipient: address,
-        network,
-      });
-
-      // Retry request with proof
-      originalRequest.headers["X-PAYMENT"] = `signature=${signature}, scheme=solana-usdc`;
-      return api(originalRequest);
-    }
-
-    return Promise.reject(error);
-  }
+const keypair = await createKeyPairSignerFromBytes(
+  base58.decode(process.env.SVM_PRIVATE_KEY!)
 );
+
+const paidFetch = wrapFetchWithPaymentFromConfig(fetch, {
+  schemes: [
+    {
+      network: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      client: new ExactSvmScheme(toClientSvmSigner(keypair), {
+        rpcUrl: process.env.SOLANA_RPC_URL,
+      }),
+    },
+  ],
+});
 ```
 
----
+## 3. Spend policy guardrail
 
-## 3. Spending Caps & Budget Controls
-
-Agents should never spend unchecked. Integrate a budget controller.
+Do not rely on the remote server's price claim. Add local policy before using a paid fetch wrapper:
 
 ```typescript
-import { BudgetController } from "@x402/core";
+const allowedDomains = new Set(["api.provider.com"]);
+const maxAtomicUsdcPerRequest = 250_000n; // 0.25 USDC, 6 decimals
+let spentTodayAtomicUsdc = 0n;
+const dailyLimitAtomicUsdc = 5_000_000n; // 5 USDC
 
-const budget = new BudgetController({
-  dailyLimitUSDC: 5.00, // Max $5.00 USD per day
-  perRequestLimitUSDC: 0.10, // Max $0.10 USD per API query
-});
-
-const svmClient = new ExactSvmScheme(agentKeypair, {
-  beforePay: async (paymentDetails) => {
-    const isAllowed = await budget.checkAndRecord(paymentDetails.amount);
-    if (!isAllowed) {
-      throw new Error(`Payment blocked: Daily spending cap exceeded or request exceeds maximum limit.`);
-    }
+function assertSpendAllowed(url: string, requestedAtomicUsdc: bigint) {
+  const host = new URL(url).host;
+  if (!allowedDomains.has(host)) {
+    throw new Error(`Blocked paid request to untrusted domain: ${host}`);
   }
-});
+  if (requestedAtomicUsdc > maxAtomicUsdcPerRequest) {
+    throw new Error("Blocked paid request over per-request cap");
+  }
+  if (spentTodayAtomicUsdc + requestedAtomicUsdc > dailyLimitAtomicUsdc) {
+    throw new Error("Blocked paid request over daily cap");
+  }
+}
 ```
+
+When the SDK exposes payment-selection hooks, enforce:
+
+- trusted domain
+- expected CAIP-2 network
+- expected USDC mint
+- expected payee or payee allowlist
+- max amount in atomic USDC units
+- quote expiry
+- daily/session budget
+
+## 4. Avoid manual header flows
+
+Avoid Axios interceptors or custom logic that parses `PAYMENT-REQUIRED` / `X-PAYMENT` by hand. Only use a manual flow when the SDK wrapper cannot be used, and then treat it as security-critical protocol code.
+
+Always log `PAYMENT-RESPONSE` after successful paid calls for reconciliation.

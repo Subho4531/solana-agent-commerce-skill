@@ -1,75 +1,57 @@
 # x402 Protocol Specification & Solana Integration
 
-This document describes the technical flow of the x402 Protocol and its direct integration with Solana using the `@x402/svm` package.
+This document describes the x402 HTTP payment flow and the Solana/SVM defaults used by this skill.
 
----
+## 1. Technical flow
 
-## 1. Technical Flow
+1. **Initial request**: the client calls a protected API route.
+2. **Payment challenge**: the server returns `402 Payment Required` with structured x402 payment requirements.
+3. **Payment payload**: the client SDK constructs and signs the required payment payload.
+4. **Retry**: the client retries the original request using the SDK-managed payment header.
+5. **Verification/settlement**: the server/facilitator verifies and settles the payment.
+6. **Receipt**: the server returns the resource and a `PAYMENT-RESPONSE` receipt header.
 
-The x402 flow integrates directly into standard HTTP request-response cycles:
+Prefer official SDK wrappers over hand-written `PAYMENT-REQUIRED` / `X-PAYMENT` parsing.
 
-1. **Initial Request**:
-   The client makes a standard HTTP request to a protected API route (e.g., `GET /api/v1/analytics`).
+## 2. Official SDK packages
 
-2. **Payment Challenge (HTTP 402)**:
-   The server intercepts the request, determines that it requires payment, and returns an `HTTP 402 Payment Required` response containing the `PAYMENT-REQUIRED` header:
-   ```http
-   HTTP/1.1 402 Payment Required
-   PAYMENT-REQUIRED: scheme=solana-usdc, amount=0.01, address=YOUR_USDC_WALLET_ADDRESS, network=solana:mainnet
-   ```
+- `@x402/core`: common types, serialization, and schema validation.
+- `@x402/svm`: Solana Virtual Machine implementation.
+- `@x402/fetch`: fetch wrapper that resolves 402 responses.
+- `@x402/express`, `@x402/hono`, `@x402/next`: server middleware.
 
-3. **Payment Settlement**:
-   The client (or its integrated wallet library) parses the header, constructs an SPL Token transfer transaction for the specified USDC amount, signs it, and broadcasts/submits it to the network.
+## 3. Solana defaults
 
-4. **Retry with Proof**:
-   The client retries the original HTTP request, appending the payment signature to the header:
-   ```http
-   GET /api/v1/analytics HTTP/1.1
-   X-PAYMENT: signature=TRANSACTION_SIGNATURE_HERE, scheme=solana-usdc
-   ```
+| Network | CAIP-2 ID | USDC mint |
+| :--- | :--- | :--- |
+| Mainnet-Beta | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
-5. **Access Granted**:
-   The server verifies the signature on-chain (or queries a Facilitator) to confirm payment, and returns `HTTP 200 OK` with the requested data.
-
----
-
-## 2. official SDK packages
-
-The `@x402` package ecosystem spans core client, server, and chain-specific plugins:
-
-* **`@x402/core`**: Common types, serialization, and schema validation.
-* **`@x402/svm`**: Solana Virtual Machine plugin; implements transaction construction and verification for Solana.
-* **`@x402/fetch`**: Intercepts `402` responses in standard fetch calls, auto-signs, and retries.
-* **`@x402/express` / `@x402/hono` / `@x402/next`**: Middleware to easily guard endpoints.
-
----
-
-## 3. Solana Code Patterns
-
-### Client-Side (Agent Consuming Gated API)
+## 4. Client-side pattern
 
 ```typescript
-import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
-import { ExactSvmScheme } from "@x402/svm";
-import { Keypair } from "@solana/web3.js";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { createSvmClient } from "@x402/svm/client";
+import { toClientSvmSigner } from "@x402/svm";
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { base58 } from "@scure/base";
 
-// Load agent's wallet keypair
-const agentKeypair = Keypair.fromSecretKey(...);
+const keypair = await createKeyPairSignerFromBytes(
+  base58.decode(process.env.SVM_PRIVATE_KEY!)
+);
 
-// Wrap fetch to automatically resolve 402s on Solana
-const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{
-    network: "solana:mainnet",
-    client: new ExactSvmScheme(agentKeypair),
-  }],
+const client = createSvmClient({
+  signer: toClientSvmSigner(keypair),
+  rpcUrl: process.env.SOLANA_RPC_URL,
 });
 
-// The request below automatically settles payment on-chain if gated
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const response = await fetchWithPayment("https://api.solana-service.com/gated-route");
+const receipt = response.headers.get("PAYMENT-RESPONSE");
 const data = await response.json();
 ```
 
-### Server-Side (Monetizing API)
+## 5. Server-side pattern
 
 ```typescript
 import express from "express";
@@ -81,12 +63,16 @@ const app = express();
 app.use(
   paymentMiddleware({
     "GET /api/v1/analytics": {
-      accepts: [{
-        scheme: ExactSvmScheme.scheme,
-        network: "solana:mainnet",
-        maxAmountRequired: "0.005", // $0.005 USDC per query
-        resource: "solana:mainnet:USDC_RECEIVER_WALLET_ADDRESS",
-      }],
+      accepts: [
+        {
+          scheme: ExactSvmScheme.scheme,
+          network: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+          maxAmountRequired: "5000",
+          payTo: process.env.PAYEE_WALLET!,
+          asset: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+          maxAgeSeconds: 60,
+        },
+      ],
       description: "Get premium Solana analytics data.",
     },
   })

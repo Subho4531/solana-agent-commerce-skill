@@ -1,95 +1,85 @@
 # Testing & Mocking x402 Integrations
 
-Testing paid agent actions requires careful simulation to avoid spending real mainnet assets during development.
+Use this reference to test paid agent actions without accidentally spending mainnet funds.
 
----
+## 1. Unit tests
 
-## 1. Local Mocking of Facilitator Challenges
+Unit tests should validate server behavior and local policy without making real payments:
 
-Instead of conducting real Solana transfers on-chain, use a local mock verifier in your test harness:
+- protected routes return `402` when no payment is supplied
+- payment requirements include the expected network, asset, payee, amount, and expiry
+- mutating routes reject requests without `Idempotency-Key`
+- buyer policy blocks unknown domains, unexpected networks, wrong payees, and over-budget prices
+- successful paid responses log `PAYMENT-RESPONSE`
 
-```typescript
-import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
-import { ExactSvmScheme } from "@x402/svm";
-import { Keypair } from "@solana/web3.js";
+Avoid subclassing `ExactSvmScheme` with fake `.pay()` methods; that API shape is stale. Mock the transport boundary instead: use a local test server that returns deterministic 402 challenges, and mock `fetch`/SDK calls at the wrapper boundary.
 
-// Local Mock Scheme
-class MockSvmScheme extends ExactSvmScheme {
-  async pay(details: any): Promise<string> {
-    console.log(`[Mock Pay] Simulating payment of ${details.amount} USDC to ${details.recipient}`);
-    // Return a dummy Solana transaction signature
-    return "MOCK_SIGNATURE_" + Math.random().toString(36).substring(7);
-  }
-}
+## 2. Devnet integration setup
 
-const testKeypair = Keypair.generate();
-const testFetch = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{
-    network: "solana:testnet",
-    client: new MockSvmScheme(testKeypair),
-  }],
-});
+Use Solana devnet for live integration tests:
+
+```bash
+solana config set --url devnet
+solana airdrop 2
 ```
 
----
+Use these x402/Solana constants:
 
-## 2. Devnet Test Setup
-
-To run integration tests against the live Solana Devnet:
-
-1. **Airdrop Devnet SOL**:
-   ```bash
-   solana airdrop 2 -u devnet
-   ```
-2. **Airdrop Devnet USDC**:
-   Use a public faucet or a custom token helper script to mint SPL USDC tokens to your test keypair (`4zMMC9zPy429a3KAeA5NDXv56A5xstVeWCntmdewWY6`).
-3. **Configure the SVM Scheme**:
-   Ensure you initialize your `ExactSvmScheme` pointing to the devnet RPC endpoint:
-
-```typescript
-import { Connection } from "@solana/web3.js";
-
-const devnetConnection = new Connection("https://api.devnet.solana.com", "confirmed");
-const devnetScheme = new ExactSvmScheme(testKeypair, {
-  connection: devnetConnection,
-  usdcMint: new PublicKey("4zMMC9zPy429a3KAeA5NDXv56A5xstVeWCntmdewWY6"),
-});
+```text
+Network: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1
+USDC mint: 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU
 ```
 
----
-
-## 3. Asserting Payment Success in Unit Tests
-
-Verify that your protected API endpoints correctly handle 402 challenge cycles.
+Client setup:
 
 ```typescript
-import { expect } from "chai";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { createSvmClient } from "@x402/svm/client";
+import { toClientSvmSigner } from "@x402/svm";
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { base58 } from "@scure/base";
+
+const keypair = await createKeyPairSignerFromBytes(
+  base58.decode(process.env.SVM_PRIVATE_KEY!)
+);
+
+const client = createSvmClient({
+  signer: toClientSvmSigner(keypair),
+  rpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+});
+
+const paidFetch = wrapFetchWithPayment(fetch, client);
+```
+
+## 3. Assertions for paid route tests
+
+```typescript
+import { describe, expect, it } from "vitest";
 import request from "supertest";
-import { app } from "../src/app"; // Express app
+import { app } from "../src/app";
 
-describe("Gated API Endpoints", () => {
-  it("should return 402 challenge on first request", async () => {
+describe("gated API endpoints", () => {
+  it("returns a payment challenge before payment", async () => {
     const res = await request(app).get("/api/v1/premium-data");
-    
-    expect(res.status).to.equal(402);
-    expect(res.headers).to.have.property("payment-required");
-    expect(res.headers["payment-required"]).to.include("scheme=solana-usdc");
+
+    expect(res.status).toBe(402);
+    expect(JSON.stringify(res.headers).toLowerCase()).toContain("payment");
   });
 
-  it("should return 200 after sending valid payment header", async () => {
-    // 1. Get challenge
-    const res1 = await request(app).get("/api/v1/premium-data");
-    
-    // 2. Simulate signing / paying to get signature
-    const signature = "VALID_TX_SIGNATURE"; // mock or devnet verified
+  it("requires idempotency for mutating paid routes", async () => {
+    const res = await request(app).post("/api/v1/generate").send({ prompt: "cat" });
 
-    // 3. Retry request with signature
-    const res2 = await request(app)
-      .get("/api/v1/premium-data")
-      .set("X-PAYMENT", `signature=${signature}, scheme=solana-usdc`);
-
-    expect(res2.status).to.equal(200);
-    expect(res2.body).to.have.property("data");
+    expect([400, 402, 428]).toContain(res.status);
   });
 });
+```
+
+## 4. Never run tests on mainnet by default
+
+Fail fast if a test uses mainnet unless the user explicitly opts in:
+
+```typescript
+if (process.env.X402_NETWORK?.includes("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")) {
+  throw new Error("Refusing to run integration tests on Solana mainnet");
+}
 ```

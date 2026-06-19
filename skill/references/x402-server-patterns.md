@@ -1,12 +1,21 @@
 # x402 Server Integration Patterns
 
-This manual describes how to protect your server endpoints using HTTP 402 Payment Required challenges, settled via Solana.
+Use this reference when protecting HTTP endpoints with x402 payment requirements settled on Solana USDC.
 
----
+## Defaults
 
-## Express Middleware
+```typescript
+const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const SOLANA_DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+const USDC_MAINNET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDC_DEVNET = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+```
 
-Use `@x402/express` to gate specific endpoints.
+Use `exact` for Solana/SVM x402 payments. Do not use `solana-usdc` or `solana:mainnet` in v2 examples.
+
+## Express route gate
+
+Use the framework middleware from `@x402/express` and bind every payment requirement tightly to the route.
 
 ```typescript
 import express from "express";
@@ -15,31 +24,39 @@ import { ExactSvmScheme } from "@x402/svm";
 
 const app = express();
 
+const network = process.env.X402_NETWORK ?? "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+const payTo = process.env.PAYEE_WALLET!;
+
 app.use(
   paymentMiddleware({
     "POST /api/v1/generate": {
-      accepts: [{
-        scheme: ExactSvmScheme.scheme,
-        network: "solana:mainnet",
-        maxAmountRequired: "0.05", // $0.05 USDC
-        resource: "solana:mainnet:USDC_RECEIVER_WALLET_ADDRESS",
-      }],
+      accepts: [
+        {
+          scheme: ExactSvmScheme.scheme,
+          network,
+          maxAmountRequired: "50000", // 0.05 USDC in atomic units when supported by middleware
+          payTo,
+          asset: process.env.USDC_MINT,
+          maxAgeSeconds: 60,
+        },
+      ],
       description: "AI image generation endpoint.",
     },
   })
 );
 
 app.post("/api/v1/generate", (req, res) => {
-  // Business logic here
+  if (!req.header("Idempotency-Key")) {
+    return res.status(428).json({ error: "Idempotency-Key required" });
+  }
+
   res.json({ image: "data:image/png;base64,..." });
 });
 ```
 
----
+If your installed middleware expects a different field name such as `resource` instead of `payTo`/`asset`, map the same values without changing the security model: exact network, exact asset, exact payee, exact method/route, and short expiry.
 
-## Hono Middleware
-
-For edge/lightweight runtimes, use `@x402/hono`.
+## Hono route gate
 
 ```typescript
 import { Hono } from "hono";
@@ -51,55 +68,39 @@ const app = new Hono();
 app.use(
   "/api/v1/translate",
   paymentMiddleware({
-    accepts: [{
-      scheme: ExactSvmScheme.scheme,
-      network: "solana:mainnet",
-      maxAmountRequired: "0.001", // $0.001 USDC
-      resource: "solana:mainnet:USDC_RECEIVER_WALLET_ADDRESS",
-    }],
+    accepts: [
+      {
+        scheme: ExactSvmScheme.scheme,
+        network: process.env.X402_NETWORK ?? "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        maxAmountRequired: "1000",
+        payTo: process.env.PAYEE_WALLET!,
+        asset: process.env.USDC_MINT,
+        maxAgeSeconds: 60,
+      },
+    ],
     description: "Premium translation service.",
   })
 );
 
 app.post("/api/v1/translate", (c) => {
+  if (!c.req.header("Idempotency-Key")) {
+    return c.json({ error: "Idempotency-Key required" }, 428);
+  }
+
   return c.json({ translatedText: "..." });
 });
 ```
 
----
+## Next.js route handlers
 
-## Next.js API Routes (App Router)
+Prefer official `@x402/next` helpers/middleware for Next.js. Do not hand-roll `PAYMENT-REQUIRED`, `X-PAYMENT`, or on-chain verification logic in route handlers unless the installed SDK requires it.
 
-Gate routes in Next.js Route Handlers.
+Minimum server checks:
 
-```typescript
-// app/api/v1/analytics/route.ts
-import { NextResponse } from "next/server";
-import { verifyPayment } from "@x402/next";
-
-export async function GET(request: Request) {
-  const paymentHeader = request.headers.get("X-PAYMENT");
-
-  if (!paymentHeader) {
-    return new NextResponse("Payment Required", {
-      status: 402,
-      headers: {
-        "PAYMENT-REQUIRED": "scheme=solana-usdc, amount=0.01, address=USDC_RECEIVER_WALLET_ADDRESS, network=solana:mainnet"
-      }
-    });
-  }
-
-  // Verify the payment signature on-chain
-  const isValid = await verifyPayment(paymentHeader, {
-    amount: 0.01,
-    receiver: "USDC_RECEIVER_WALLET_ADDRESS",
-    network: "solana:mainnet"
-  });
-
-  if (!isValid) {
-    return NextResponse.json({ error: "Invalid payment proof" }, { status: 403 });
-  }
-
-  return NextResponse.json({ data: "Highly valuable analytics results" });
-}
-```
+- route and HTTP method are exact
+- `network` is a v2 CAIP-2 ID
+- `asset` is the expected USDC mint
+- `payTo` is the expected wallet
+- `maxAmountRequired` is in the expected unit for the installed middleware
+- `maxAgeSeconds` is short, usually 60 seconds
+- mutating methods require `Idempotency-Key`

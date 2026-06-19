@@ -1,26 +1,21 @@
 # Monetizing MCP Servers with HTTP 402
 
-This manual describes how developers can monetize custom Model Context Protocol (MCP) servers using Solana micropayments.
+Use this reference when placing an x402-paid HTTP gateway in front of MCP tools.
 
----
+## 1. Gateway pattern
 
-## 1. The MCP Gateway Proxy Pattern
+Gate the HTTP transport layer, not the local stdio server directly.
 
-Standard MCP servers communicate via JSON-RPC over stdio or SSE. Gating an MCP server requires putting an HTTP 402 gateway proxy in front of the SSE transport layer:
-
-```
-+------------+       HTTP JSON-RPC       +-------------+        Local STDIO        +------------+
-|            | ------------------------> |   x402 SSE  | ------------------------> |            |
-| LLM Client |                           |  MCP Proxy  |                           | Target MCP |
-|   (User)   | <--- 402 Pay Challenge -- |   Gateway   | <--- JSON-RPC Response -- |   Server   |
-+------------+                           +-------------+                           +------------+
+```text
+Agent MCP Client -> x402 HTTP Gateway -> MCP Server
+                  <- 402 challenge
+Agent pays with @x402/fetch
+Agent retries call -> gateway forwards JSON-RPC/tool call
 ```
 
----
+Prefer streamable HTTP transports when available. SSE examples are acceptable only when the target MCP server/client stack still uses SSE.
 
-## 2. Gating an SSE MCP Server
-
-Below is an implementation pattern wrapping an SSE MCP Server using Hono and `@x402/hono`.
+## 2. Gating tool calls
 
 ```typescript
 import { Hono } from "hono";
@@ -31,26 +26,40 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 const app = new Hono();
 
-// Gate the MCP Tool call endpoint
+const priceByTool: Record<string, string> = {
+  "summarize": "10000", // 0.01 USDC if middleware expects atomic units
+  "research": "50000",
+};
+
 app.use(
   "/mcp/v1/tools/call",
   paymentMiddleware({
-    accepts: [{
-      scheme: ExactSvmScheme.scheme,
-      network: "solana:mainnet",
-      maxAmountRequired: "0.02", // $0.02 USDC per tool execution
-      resource: "solana:mainnet:USDC_RECEIVER_WALLET",
-    }],
-    description: "Paid access to MCP Tool execution.",
+    accepts: [
+      {
+        scheme: ExactSvmScheme.scheme,
+        network: process.env.X402_NETWORK ?? "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        maxAmountRequired: "50000",
+        payTo: process.env.PAYEE_WALLET!,
+        asset: process.env.USDC_MINT,
+        maxAgeSeconds: 60,
+      },
+    ],
+    description: "Paid access to MCP tool execution.",
   })
 );
 
-// Proxy tool calls to the downstream MCP server
 app.post("/mcp/v1/tools/call", async (c) => {
+  const idempotencyKey = c.req.header("Idempotency-Key");
+  if (!idempotencyKey) {
+    return c.json({ error: "Idempotency-Key required" }, 428);
+  }
+
   const body = await c.req.json();
-  
-  // Forward request to local/downstream MCP Server
-  const client = new Client({ name: "gateway-proxy", version: "1.0.0" }, {});
+  if (!Object.hasOwn(priceByTool, body.name)) {
+    return c.json({ error: "Unknown or unpriced tool" }, 400);
+  }
+
+  const client = new Client({ name: "x402-gateway", version: "1.0.0" }, {});
   const transport = new SSEClientTransport(new URL("http://localhost:8080/sse"));
   await client.connect(transport);
 
@@ -63,41 +72,36 @@ app.post("/mcp/v1/tools/call", async (c) => {
 });
 ```
 
----
+If pricing varies by tool, generate separate paid routes or choose the exact payment requirement after validating `body.name`. Never let the caller choose the price.
 
-## 3. Consuming Gated MCP Tools (Client Side)
+## 3. Consuming gated MCP gateways
 
-When an agent wants to call an MCP tool gated by a proxy, the agent's MCP client must intercept the SSE connection and provide the `X-PAYMENT` signature in the request headers:
+The MCP HTTP/SSE transport must use the paid fetch implementation. If the transport constructor does not support a custom fetch function in your installed MCP SDK version, wrap the gateway behind a small client function that uses `paidFetch` directly.
 
 ```typescript
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
-import { ExactSvmScheme } from "@x402/svm";
-import { Keypair } from "@solana/web3.js";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { createSvmClient } from "@x402/svm/client";
+import { toClientSvmSigner } from "@x402/svm";
 
-const keypair = Keypair.fromSecretKey(/* ... */);
-
-// 1. Wrap the fetch client that the transport uses
-const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{
-    network: "solana:mainnet",
-    client: new ExactSvmScheme(keypair),
-  }],
+const client = createSvmClient({
+  signer: toClientSvmSigner(mySolanaKitSigner),
+  rpcUrl: process.env.SOLANA_RPC_URL,
 });
 
-// 2. Pass the wrapped fetch into the SSE Client Transport
-const transport = new SSEClientTransport(
-  new URL("https://mcp-gateway.provider.com/sse"),
-  {
-    eventSourceInitDict: {
-      // Support fetch-based SSE wrappers if needed
-    },
-    // Intercept client HTTP calls
-    requestInit: {
-      headers: {
-        // Additional authentication or connection info
-      }
-    }
-  }
-);
+const paidFetch = wrapFetchWithPayment(fetch, client);
+
+const response = await paidFetch("https://mcp-gateway.provider.com/mcp/v1/tools/call", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Idempotency-Key": crypto.randomUUID(),
+  },
+  body: JSON.stringify({
+    name: "summarize",
+    arguments: { text: "..." },
+  }),
+});
+
+const paymentReceipt = response.headers.get("PAYMENT-RESPONSE");
+const result = await response.json();
 ```

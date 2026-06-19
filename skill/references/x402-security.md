@@ -30,12 +30,20 @@ Implement cooldown periods and hard maximum spending thresholds to protect again
 - [ ] **Daily/Weekly Budget**: Global limits across all transactions in a rolling window.
 - [ ] **Rate Limiting (Cooldowns)**: Enforce a minimum interval between payments (e.g., maximum 1 payment every 10 seconds).
 - [ ] **Manual Approval Threshold**: Any transaction above a certain amount (e.g., $1.00 USDC) requires human-in-the-loop approval.
+- [ ] **Domain Allowlist**: Only pay hosts that the user or application explicitly trusts.
+- [ ] **Network Allowlist**: Only pay expected CAIP-2 IDs such as `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` for devnet.
+- [ ] **Payee Allowlist**: Match the seller wallet against a known allowlist when possible.
+- [ ] **Receipt Log**: Persist `PAYMENT-RESPONSE` with request ID, route, amount, payee, network, and timestamp.
 
 ---
 
 ## 3. Sandboxing & Input Sanitization
 
 Before submitting any payment transaction constructed by an agent, verify:
-- **Recipient Address**: Compare the recipient wallet address against a known blocklist or check if it matches a whitelist of known service providers.
-- **USDC Mint Verification**: Ensure the SPL token mint matches exactly the official USDC Mint address. A malicious 402 header could specify a fake token mint, draining custom tokens.
-- **Gas Fees (Lamports)**: Set a strict cap on the Solana fee payer budget to prevent "priority fee draining" attacks where an adversary requests excessive transaction prioritization fees.
+- **Recipient Address**: Compare the recipient wallet address against an allowlist of known service providers. Treat blocklists as supplemental only.
+- **USDC Mint Verification**: Ensure the SPL token mint exactly matches the expected USDC mint for the CAIP-2 network.
+- **Amount Units**: Compare limits in atomic USDC units, not floating-point dollars.
+- **Quote Expiry**: Reject stale payment requirements and require short server-side `maxAgeSeconds`.
+- **Gas Fees (Lamports)**: Set a strict cap on the Solana fee payer budget to prevent priority-fee draining.
+- **Route Binding**: Bind payment to method, URL, network, asset, payee, and price. Never accept a payment proof for a different route.
+- **Idempotency**: Require an `Idempotency-Key` on POST/PUT/PATCH/DELETE and store processed keys to avoid double execution.

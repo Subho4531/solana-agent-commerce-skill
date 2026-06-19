@@ -1,69 +1,48 @@
 # x402 Facilitators & Verification Networks
 
-Facilitators act as verification nodes. Rather than requiring every server to poll RPC endpoints directly (which is slow and expensive), servers can rely on an x402 Facilitator to guarantee transaction validity and cache payment proofs.
+Facilitators verify and settle x402 payment payloads so every seller does not need to implement Solana transaction verification by hand.
 
----
+## 1. Flow
 
-## 1. What is an x402 Facilitator?
-
-An x402 Facilitator is a decentralized or centralized agent that listens to the blockchain, monitors SPL USDC transfers, and issues cryptographically signed validation certificates.
-
-```
-+------------+                 +------------+
-|            | -- 1. Challenge --> |            |
-|   Client   | <--- 2. HTTP 402 -- |   Server   |
-|  (Agent)   |                     |  (Provider)|
-|            | --- 4. Request+ ---> |            |
-|            |        Proof        |            |
-+------------+                     +------------+
-      |                                  |
- 3. SPL Transfer                  5. Verify Proof
-      |                                  |
-      v                                  v
-+------------+                     +------------+
-|   Solana   | <--- Listen/Sync --- |    x402    |
-| Blockchain |                      | Facilitator|
-+------------+                      +------------+
+```text
+Client -> Server: request protected resource
+Server -> Client: 402 payment requirements
+Client -> Facilitator/Solana path: create signed payment payload
+Client -> Server: retry original request with x402 payment header
+Server -> Facilitator: verify/settle payment
+Server -> Client: resource + PAYMENT-RESPONSE receipt
 ```
 
----
+For Solana, use the `exact` scheme via `@x402/svm`. The facilitator/server implementation should verify the same requirement the server issued: network, asset, payee, amount, route, method, and expiry.
 
-## 2. Using a Hosted Facilitator
+## 2. Hosted facilitator
 
-You can configure your server to verify payments via the public x402 verification network:
+Use the hosted facilitator URL configured by the current x402 docs or your deployment. This repo has historically used both:
 
-```typescript
-import { paymentMiddleware } from "@x402/express";
+- `https://x402.org/facilitator`
+- `https://api.x402.org`
 
-app.use(
-  paymentMiddleware({
-    endpoints: {
-      "GET /api/v1/data": {
-        accepts: [{
-          scheme: "solana-usdc",
-          network: "solana:mainnet",
-          amount: "0.01",
-          resource: "solana:mainnet:USDC_RECEIVER",
-        }]
-      }
-    },
-    // Verify signatures via the official Facilitator REST API
-    facilitatorUrl: "https://api.x402.org",
-    apiKey: process.env.X402_FACILITATOR_KEY,
-  })
-);
+Before generating production code, verify the intended facilitator URL from the installed SDK or official deployment docs and keep it in one environment variable:
+
+```env
+X402_FACILITATOR_URL=https://x402.org/facilitator
+X402_FACILITATOR_API_KEY=
 ```
 
----
+Server middleware should read from `process.env.X402_FACILITATOR_URL` instead of hardcoding a URL.
 
-## 3. Self-Hosted Facilitator Setup
+## 3. Self-hosted facilitator
 
-For high-speed, enterprise-grade applications, host your own facilitator. A self-hosted facilitator runs a local node or high-performance RPC subscription (like Helius webhooks) to record transaction signatures.
+For production volume or stricter control, self-host the facilitator components supported by the currently installed `@x402/svm` package. Prefer package exports such as `@x402/svm/exact/facilitator` over undocumented package names.
 
-### Steps to Run:
-1. Deploy the `@x402/facilitator-node` service in your infrastructure.
-2. Connect it to a dedicated Solana RPC node.
-3. Configure Redis for instant memory caching of verified signatures.
-4. Set the `facilitatorUrl` in your servers to point to your internal load balancer (e.g., `http://facilitator.internal.local`).
+Self-hosting checklist:
 
-This avoids public network roundtrips, reducing verification times from ~1.5s to <50ms.
+- private Solana RPC
+- isolated facilitator signer / fee payer
+- short settlement cache TTL
+- duplicate settlement protection
+- structured logs for payment payloads and settlement receipts
+- rate limits per seller route
+- alerting on failed settlement or unexpected asset/payee
+
+Do not claim sub-50ms settlement or verification unless you have measured it in the target deployment.

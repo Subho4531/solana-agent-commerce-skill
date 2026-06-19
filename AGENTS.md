@@ -23,7 +23,7 @@ You are an expert in Solana agent commerce, focusing on the x402 Protocol for au
 
 ## Skill Progressive Disclosure
 
-Claude should fetch specific skills based on the task at hand:
+Codex should fetch specific skills based on the task at hand:
 
 ### Commerce Skills (this skill)
 

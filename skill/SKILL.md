@@ -1,13 +1,6 @@
 ---
 name: solana-agent-commerce
-description: >
-  Use when implementing x402 payments on Solana, gating API/MCP routes with HTTP 402,
-  building AI agents that autonomously pay for on-chain data or DeFi actions, integrating
-  with Jupiter swaps, Orca Whirlpools, Raydium, Meteora, Drift Protocol, or Helius RPC,
-  managing USDC/SPL token wallets for agents, multi-agent commerce flows, monetizing
-  services with pay-per-request micropayments, and hardening payment flows against
-  replay attacks, stale quotes, and overspending.
-user-invocable: true
+description: Solana-first agent commerce and x402 skill for building paid APIs, paid MCP servers, and buyer agents that use Solana USDC/SPL/Token2022 payments. Use when implementing x402 on Solana, monetizing API endpoints or MCP tools, adding agent spend policies, pricing paid agent workflows, testing Solana devnet x402 payments, reconciling payment receipts, or hardening x402 payment flows against replay, stale quotes, route confusion, concurrency, and overspending.
 ---
 
 # Solana Agent Commerce Skill
@@ -38,15 +31,21 @@ user-invocable: true
 | Build buyer agent that auto-pays 402s | [x402-client-patterns.md](references/x402-client-patterns.md) |
 | Solana network config, USDC mints, CAIP-2, keypairs | [x402-solana-integration.md](references/x402-solana-integration.md) |
 | Facilitator setup (Coinbase hosted or self-hosted) | [x402-facilitator.md](references/x402-facilitator.md) |
-| Jupiter swaps → USDC for agent payments | [x402-defi-jupiter.md](references/x402-defi-jupiter.md) |
-| Orca, Raydium, Meteora, Drift DeFi integrations | [x402-defi-protocols.md](references/x402-defi-protocols.md) |
-| Helius RPC, DAS API, Pyth oracles for paid data APIs | [x402-data-infrastructure.md](references/x402-data-infrastructure.md) |
 | Solana Agent Kit / LangChain / Vercel AI SDK | [x402-agent-kit.md](references/x402-agent-kit.md) |
-| Multi-agent payment architectures | [x402-multi-agent.md](references/x402-multi-agent.md) |
 | Monetize MCP tool server with x402 | [x402-mcp-monetization.md](references/x402-mcp-monetization.md) |
 | Security: spend caps, key management, OFAC | [x402-security.md](references/x402-security.md) |
 | Devnet testing, mock facilitator, Vitest | [x402-testing.md](references/x402-testing.md) |
-| Ecosystem resources & links | [x402-resources.md](references/x402-resources.md) |
+| Ecosystem resources, DeFi, infrastructure, and roadmap docs | [docs/index.md](../docs/index.md) |
+
+---
+
+## Specialized Agents
+
+This skill provides three specialized agents to assist you:
+
+1. **`x402-architect`**: Use for high-level system design, key vaulting, and choosing the right facilitator setup.
+2. **`x402-builder`**: Use for generating concrete, type-safe TypeScript code for clients and servers.
+3. **`x402-auditor`**: Use to aggressively review code against the `x402-security-rules.md`. Trigger via `/audit-routes`.
 
 ---
 
@@ -60,7 +59,7 @@ user-invocable: true
 | **Payment scheme** | `exact` via `ExactSvmScheme` from `@x402/svm` |
 | **Payment token** | USDC SPL — Mainnet: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
 | **Server framework** | Hono (edge-first) or Express for Node.js |
-| **Client wrapper** | `@x402/fetch` with `wrapFetchWithPaymentFromConfig` |
+| **Client wrapper** | `@x402/fetch` with `wrapFetchWithPayment` or `wrapFetchWithPaymentFromConfig` |
 | **Swap router** | Jupiter v6 for any token → USDC conversion |
 | **RPC provider** | Helius (mainnet), public devnet for testing |
 | **Key management** | env vars only; never hardcode; KMS for production |
@@ -82,8 +81,8 @@ npm install @x402/hono        # Hono (recommended)
 npm install @x402/next        # Next.js App Router
 npm install @x402/fastify     # Fastify
 
-# Solana
-npm install @solana/web3.js@1 bs58 dotenv
+# Solana signer utilities used by @x402/svm v2
+npm install @solana/kit @scure/base dotenv
 
 # DeFi (install only what you need)
 npm install @jup-ag/api       # Jupiter v6 REST client
@@ -136,7 +135,8 @@ Orchestrator Agent → discovers peer agents via service registry
 ## Operating Procedure
 
 1. **Classify the task** using the routing table above.
-2. **Read the specific reference file** — do not load all references at once.
-3. **Check the Defaults** — use opinionated defaults unless overridden by user.
-4. **Apply security rules** — always include spend caps and key management.
-5. **Write tests** — always include devnet test patterns.
+2. **Adopt the appropriate persona** (`architect`, `builder`, or `auditor`) when the environment does not support external agent files.
+3. **Read the specific reference file** — do not load all references at once.
+4. **Check the Defaults** — use opinionated defaults unless overridden by user.
+5. **Apply security rules** (`rules/x402-security-rules.md`) — always include spend caps and key management.
+6. **Write tests** — always include devnet test patterns.
