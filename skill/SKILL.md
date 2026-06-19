@@ -36,6 +36,7 @@ description: Solana-first agent commerce and x402 skill for building paid APIs, 
 | Security: spend caps, key management, OFAC | [x402-security.md](references/x402-security.md) |
 | Devnet testing, mock facilitator, Vitest | [x402-testing.md](references/x402-testing.md) |
 | Ecosystem resources, DeFi, infrastructure, and roadmap docs | [docs/index.md](../docs/index.md) |
+| Build-time and runtime agent workflows & flowcharts | [docs/agent_workflow.md](../docs/agent_workflow.md) |
 
 ---
 

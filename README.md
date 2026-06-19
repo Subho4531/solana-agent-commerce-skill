@@ -144,6 +144,8 @@ With our custom integrations, you can wire x402 directly into the **Solana Agent
 └─────────────────────────────────────────────────────────────┘
 ```
 
+For a detailed visual walkthrough of the build-time developer agent flow and runtime agent-to-agent transactions, see the [Agent Workflows & Flowcharts](file:///c:/Users/subho/OneDrive/Documents/solanaagentskill/docs/agent_workflow.md) guide.
+
 ---
 
 ## ⚖️ License
