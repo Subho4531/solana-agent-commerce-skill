@@ -36,7 +36,11 @@ By leveraging the long-dormant HTTP `402 Payment Required` status code, the x402
 │   ├── x402-architect.md              # System design & architecture helper agent
 │   └── x402-builder.md                # Node.js/TypeScript developer helper agent
 ├── commands/
-│   └── x402-scaffold.md               # Scaffolding helper script
+│   ├── audit-routes.md                # Audit routes for x402 compliance
+│   ├── scaffold-buyer.md              # Scaffold a buyer agent
+│   ├── scaffold-seller.md             # Scaffold a seller service
+│   ├── test-devnet.md                 # Test workflows on devnet
+│   └── x402-scaffold.md               # Base scaffolding helper script
 └── rules/
     └── x402-security-rules.md         # Custom guidelines for safe agent commerce
 ```
