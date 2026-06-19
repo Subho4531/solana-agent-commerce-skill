@@ -1,6 +1,6 @@
 # Solana Agent Commerce Skill (x402)
 
-![Solana Agent Commerce Launch](/launch.png)
+![Solana Agent Commerce Launch](/assets/launch.png)
 
 The **Solana Agent Commerce Skill** is a developer integration toolkit for building Solana x402 paid APIs, paid MCP gateways, and buyer agents with strict USDC spend policies.
 
