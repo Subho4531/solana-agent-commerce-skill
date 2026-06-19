@@ -73,6 +73,10 @@ cd solana-agent-commerce-skill
 ./install.sh --agents --rules --commands
 ```
 
+### Installation Preview
+
+![Solana Agent Skills Installation](assets/image.png)
+
 ### Installation Flags
 
 *   `--agents`: Installs the `x402-architect`, `x402-builder`, and `x402-auditor` system agents to `.agents/`.
